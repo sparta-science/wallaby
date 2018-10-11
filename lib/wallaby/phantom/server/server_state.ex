@@ -25,7 +25,9 @@ defmodule Wallaby.Phantom.Server.ServerState do
     :phantom_args,
     :wrapper_script_port,
     :wrapper_script_os_pid,
-    :phantom_os_pid]
+    :phantom_os_pid,
+    :start_task
+  ]
 
   @type workspace_path :: String.t
 

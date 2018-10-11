@@ -24,6 +24,10 @@ defmodule Wallaby.Phantom.Server do
     GenServer.call(server, :get_base_url)
   end
 
+  def await(server) do
+    GenServer.call(server, :await, 5_000)
+  end
+
   @spec get_wrapper_os_pid(pid) :: os_pid
   def get_wrapper_os_pid(server) do
     GenServer.call(server, :get_wrapper_os_pid)
@@ -45,13 +49,7 @@ defmodule Wallaby.Phantom.Server do
   @impl GenServer
   def init(args) do
     {:ok, workspace_path} = ProcessWorkspace.create(self())
-
-    case workspace_path |> ServerState.new(args) |> start_phantom() do
-      {:ok, server_state} ->
-        {:ok, server_state}
-      {:error, reason} ->
-        {:stop, reason}
-    end
+    workspace_path |> ServerState.new(args) |> start_phantom()
   end
 
   @impl GenServer
@@ -78,7 +76,22 @@ defmodule Wallaby.Phantom.Server do
     {:reply, result, state}
   end
 
-  @impl GenServer
+  def handle_call(:await, _from, %ServerState{start_task: nil} = state) do
+    {:reply, nil, state}
+  end
+
+  def handle_call(:await, _from, %ServerState{start_task: start_task} = state) do
+    case start_task |> Task.await(4_000) do
+      {:ok, new_state} ->
+        {:reply, nil, %{new_state | start_task: nil}}
+
+      {:error, reason} ->
+        IO.inspect(reason, label: "reason")
+        {:stop, reason, nil, state}
+    end
+  end
+
+    @impl GenServer
   def handle_info({port, {:data, _output}}, %ServerState{wrapper_script_port: port} = state) do
     {:noreply, state}
   end
@@ -96,7 +109,7 @@ defmodule Wallaby.Phantom.Server do
   @spec start_phantom(ServerState.t) ::
     {:ok, ServerState.t} | {:error, StartTask.error_reason}
   defp start_phantom(%ServerState{} = state) do
-    state |> StartTask.async() |> Task.await()
+    {:ok, %{state | start_task: StartTask.async(state)}}
   end
 
   @spec wait_for_stop(os_pid) :: nil

@@ -34,6 +34,7 @@ defmodule Wallaby.Phantom do
   use Supervisor
 
   alias Wallaby.Phantom.Driver
+  alias Wallaby.Phantom.Server
   alias Wallaby.DependencyError
 
   @behaviour Wallaby.Driver
@@ -97,6 +98,7 @@ defmodule Wallaby.Phantom do
   @doc false
   def start_session(opts) do
     server = :poolboy.checkout(@pool_name, true, :infinity)
+    Server.await(server)
     Wallaby.Phantom.Driver.create(server, opts)
   end
 
