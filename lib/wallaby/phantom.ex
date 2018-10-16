@@ -97,8 +97,7 @@ defmodule Wallaby.Phantom do
 
   @doc false
   def start_session(opts) do
-    server = :poolboy.checkout(@pool_name, true, :infinity)
-    Server.await(server)
+    server = checkout()
     Wallaby.Phantom.Driver.create(server, opts)
   end
 
@@ -107,7 +106,7 @@ defmodule Wallaby.Phantom do
     Driver.execute_script(session, "localStorage.clear()", [],
                           check_logs: false)
     Driver.delete(session)
-    :poolboy.checkin(Wallaby.ServerPool, server)
+    :poolboy.checkin(@pool_name, server)
   end
 
   def blank_page?(session) do
@@ -200,6 +199,7 @@ defmodule Wallaby.Phantom do
     [name: {:local, @pool_name},
      worker_module: Wallaby.Phantom.Server,
      size: pool_size(),
+     strategy: :fifo,
      max_overflow: 0]
   end
 
@@ -209,5 +209,16 @@ defmodule Wallaby.Phantom do
 
   defp configured_phantom_js do
     Application.get_env(:wallaby, :phantomjs, "phantomjs")
+  end
+
+  defp checkout() do
+    server = :poolboy.checkout(@pool_name, true, :infinity)
+    case Server.get_start_task(server) do
+      nil ->
+        server
+      _ ->
+        :poolboy.checkin(@pool_name, server)
+        checkout()
+    end
   end
 end

@@ -8,6 +8,7 @@ defmodule Wallaby.Phantom.Server.StartTask do
   #
 
   alias Wallaby.Driver.ExternalCommand
+  alias Wallaby.Phantom.Server
   alias Wallaby.Phantom.Server.ServerState
 
   @type os_pid :: non_neg_integer
@@ -25,7 +26,7 @@ defmodule Wallaby.Phantom.Server.StartTask do
   @spec run(pid, ServerState.t) ::
     {:ok, ServerState.t} | {:error, error_reason}
   def run(server_pid, server_state) do
-    case server_state |> setup_workspace() |> start_phantom() |> loop() do
+    response = case server_state |> setup_workspace() |> start_phantom() |> loop() do
       {:ok, server_state} ->
         # Transfers control of port over to the calling process.
         Port.connect(server_state.wrapper_script_port, server_pid)
@@ -33,6 +34,8 @@ defmodule Wallaby.Phantom.Server.StartTask do
       {:error, reason} ->
         {:error, reason}
     end
+    Server.notify_started(server_pid)
+    response
   end
 
   @doc false

@@ -24,8 +24,13 @@ defmodule Wallaby.Phantom.Server do
     GenServer.call(server, :get_base_url)
   end
 
-  def await(server) do
-    GenServer.call(server, :await, 5_000)
+  def notify_started(server) do
+    GenServer.cast(server, :notify_started)
+  end
+
+  @spec get_start_task(pid) :: StartTask.t | nil
+  def get_start_task(server) do
+    GenServer.call(server, :get_start_task)
   end
 
   @spec get_wrapper_os_pid(pid) :: os_pid
@@ -57,6 +62,10 @@ defmodule Wallaby.Phantom.Server do
     {:reply, ServerState.base_url(state), state}
   end
 
+  def handle_call(:get_start_task, _, %ServerState{start_task: start_task} = state) do
+    {:reply, start_task, state}
+  end
+
   def handle_call(:get_wrapper_os_pid, _, %ServerState{wrapper_script_os_pid: wrapper_script_os_pid} = state) do
     {:reply, wrapper_script_os_pid, state}
   end
@@ -76,22 +85,13 @@ defmodule Wallaby.Phantom.Server do
     {:reply, result, state}
   end
 
-  def handle_call(:await, _from, %ServerState{start_task: nil} = state) do
-    {:reply, nil, state}
+  @impl true
+  def handle_cast(:notify_started, %ServerState{} = state) do
+    new_state = %{state | start_task: nil}
+    {:noreply, new_state}
   end
 
-  def handle_call(:await, _from, %ServerState{start_task: start_task} = state) do
-    case start_task |> Task.await(4_000) do
-      {:ok, new_state} ->
-        {:reply, nil, %{new_state | start_task: nil}}
-
-      {:error, reason} ->
-        IO.inspect(reason, label: "reason")
-        {:stop, reason, nil, state}
-    end
-  end
-
-    @impl GenServer
+  @impl GenServer
   def handle_info({port, {:data, _output}}, %ServerState{wrapper_script_port: port} = state) do
     {:noreply, state}
   end
@@ -106,8 +106,7 @@ defmodule Wallaby.Phantom.Server do
     wait_for_stop(wrapper_script_os_pid)
   end
 
-  @spec start_phantom(ServerState.t) ::
-    {:ok, ServerState.t} | {:error, StartTask.error_reason}
+  @spec start_phantom(ServerState.t) :: {:ok, ServerState.t}
   defp start_phantom(%ServerState{} = state) do
     {:ok, %{state | start_task: StartTask.async(state)}}
   end
