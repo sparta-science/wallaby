@@ -8,7 +8,6 @@ defmodule Wallaby.Phantom.Server.StartTask do
   #
 
   alias Wallaby.Driver.ExternalCommand
-  alias Wallaby.Phantom.Server
   alias Wallaby.Phantom.Server.ServerState
 
   @type os_pid :: non_neg_integer
