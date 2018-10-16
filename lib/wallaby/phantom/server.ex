@@ -24,13 +24,8 @@ defmodule Wallaby.Phantom.Server do
     GenServer.call(server, :get_base_url)
   end
 
-  def notify_started(server) do
-    GenServer.cast(server, :notify_started)
-  end
-
-  @spec get_start_task(pid) :: StartTask.t | nil
-  def get_start_task(server) do
-    GenServer.call(server, :get_start_task)
+  def status(server) do
+    GenServer.call(server, :status)
   end
 
   @spec get_wrapper_os_pid(pid) :: os_pid
@@ -62,8 +57,12 @@ defmodule Wallaby.Phantom.Server do
     {:reply, ServerState.base_url(state), state}
   end
 
-  def handle_call(:get_start_task, _, %ServerState{start_task: start_task} = state) do
-    {:reply, start_task, state}
+  def handle_call(:status, _,  %ServerState{start_task: nil} = state) do
+    {:reply, :ok, state}
+  end
+
+  def handle_call(:status, _,  %ServerState{} = state) do
+    {:reply, :starting, state}
   end
 
   def handle_call(:get_wrapper_os_pid, _, %ServerState{wrapper_script_os_pid: wrapper_script_os_pid} = state) do
@@ -85,18 +84,20 @@ defmodule Wallaby.Phantom.Server do
     {:reply, result, state}
   end
 
-  @impl true
-  def handle_cast(:notify_started, %ServerState{} = state) do
-    new_state = %{state | start_task: nil}
-    {:noreply, new_state}
-  end
-
   @impl GenServer
   def handle_info({port, {:data, _output}}, %ServerState{wrapper_script_port: port} = state) do
     {:noreply, state}
   end
   def handle_info({port, {:exit_status, status}}, %ServerState{wrapper_script_port: port} = state) do
     {:stop, {:exit_status, status}, state}
+  end
+  def handle_info(:await, %ServerState{start_task: start_task} = state) do
+    case start_task |> Task.await(5_000) do
+      {:ok, new_state} ->
+        {:noreply, %{new_state | start_task: nil}}
+      {:error, reason} ->
+        {:stop, reason, state}
+    end
   end
   def handle_info(msg, state), do: super(msg, state)
 
@@ -108,6 +109,7 @@ defmodule Wallaby.Phantom.Server do
 
   @spec start_phantom(ServerState.t) :: {:ok, ServerState.t}
   defp start_phantom(%ServerState{} = state) do
+    Process.send_after(self(), :await, 100)
     {:ok, %{state | start_task: StartTask.async(state)}}
   end
 

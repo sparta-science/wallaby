@@ -213,10 +213,10 @@ defmodule Wallaby.Phantom do
 
   defp checkout() do
     server = :poolboy.checkout(@pool_name, true, :infinity)
-    case Server.get_start_task(server) do
-      nil ->
+    case Server.status(server) do
+      :ok ->
         server
-      _ ->
+      :starting ->
         :poolboy.checkin(@pool_name, server)
         checkout()
     end
