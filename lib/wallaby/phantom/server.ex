@@ -107,9 +107,11 @@ defmodule Wallaby.Phantom.Server do
     wait_for_stop(wrapper_script_os_pid)
   end
 
+  @await_delay_ms 5
+
   @spec start_phantom(ServerState.t) :: {:ok, ServerState.t}
   defp start_phantom(%ServerState{} = state) do
-    Process.send_after(self(), :await, 100)
+    Process.send_after(self(), :await, @await_delay_ms)
     {:ok, %{state | start_task: StartTask.async(state)}}
   end
 
