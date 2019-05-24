@@ -19,7 +19,8 @@ defmodule Wallaby.Experimental.Chrome do
   def init(:ok) do
     children = [
       worker(Wallaby.Experimental.Chrome.Chromedriver, []),
-      worker(Wallaby.Driver.LogStore, [])
+      worker(Wallaby.Driver.LogStore, []),
+      Mutex.child_spec(:chrome_session_mutex)
     ]
 
     supervise(children, strategy: :one_for_one)
@@ -84,31 +85,35 @@ defmodule Wallaby.Experimental.Chrome do
   end
 
   def start_session(opts) do
-    {:ok, base_url} = Chromedriver.base_url()
-    create_session_fn = Keyword.get(opts, :create_session_fn, &WebdriverClient.create_session/2)
+    Mutex.under(:chrome_session_mutex, :start_session, :infinity, fn ->
+      :timer.sleep(500)
 
-    user_agent =
-      user_agent()
-      |> Metadata.append(opts[:metadata])
+      {:ok, base_url} = Chromedriver.base_url()
+      create_session_fn = Keyword.get(opts, :create_session_fn, &WebdriverClient.create_session/2)
 
-    capabilities = capabilities(user_agent: user_agent)
+      user_agent =
+        user_agent()
+        |> Metadata.append(opts[:metadata])
 
-    with {:ok, response} <- create_session_fn.(base_url, capabilities) do
-      id = response["sessionId"]
+      capabilities = capabilities(user_agent: user_agent)
 
-      session = %Wallaby.Session{
-        session_url: base_url <> "session/#{id}",
-        url: base_url <> "session/#{id}",
-        id: id,
-        driver: __MODULE__,
-        server: Chromedriver
-      }
+      with {:ok, response} <- create_session_fn.(base_url, capabilities) do
+        id = response["sessionId"]
 
-      if window_size = Keyword.get(opts, :window_size),
-        do: {:ok, _} = set_window_size(session, window_size[:width], window_size[:height])
+        session = %Wallaby.Session{
+          session_url: base_url <> "session/#{id}",
+          url: base_url <> "session/#{id}",
+          id: id,
+          driver: __MODULE__,
+          server: Chromedriver
+        }
 
-      {:ok, session}
-    end
+        if window_size = Keyword.get(opts, :window_size),
+           do: {:ok, _} = set_window_size(session, window_size[:width], window_size[:height])
+
+        {:ok, session}
+      end
+    end)
   end
 
   def end_session(%Wallaby.Session{} = session, opts \\ []) do
